@@ -1,0 +1,50 @@
+services:
+
+  db:
+    image: mysql:8.0
+    container_name: ${APP_NAME}_db
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - db_data:/var/lib/mysql
+
+  dolibarr:
+    image: dolibarr/dolibarr:21
+    container_name: ${APP_NAME}_app
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "${DOLIBARR_PORT}:80"
+    environment:
+      DOLI_DB_HOST: db
+      DOLI_DB_NAME: ${DOLI_DB_NAME}
+      DOLI_DB_USER: ${DOLI_DB_USER}
+      DOLI_DB_PASSWORD: ${DOLI_DB_PASSWORD}
+      DOLI_ADMIN_LOGIN: ${DOLI_ADMIN_LOGIN}
+      DOLI_ADMIN_PASSWORD: ${DOLI_ADMIN_PASSWORD}
+      WWW_USER_ID: ${WWW_USER_ID}
+      WWW_GROUP_ID: ${WWW_GROUP_ID}
+    volumes:
+      - ./custom:/var/www/html/custom
+      - dolibarr_documents:/var/www/documents
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: ${APP_NAME}_pma
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "${PMA_PORT}:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: ${DOLI_DB_USER}
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+volumes:
+  db_data:
+  dolibarr_documents:
