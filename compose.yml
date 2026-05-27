@@ -1,53 +1,79 @@
 services:
-  mariadb:
-    image: mariadb:latest
+  db:
+    image: mysql:8.0
+    container_name: ${APP_NAME}_db
+    restart: always
+    command: --default-authentication-plugin=mysql_native_password
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-dolidb}
-      MYSQL_USER: ${MYSQL_USER:-dolidbuser}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dolidbpass}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
     volumes:
-      - ./mariadb:/var/lib/mysql
-    networks:
-      - dolibarr_network
-
-  web:
-    image: dolibarr/dolibarr:19.0.4
-    environment:
-      WWW_USER_ID: ${WWW_USER_ID:-1000}
-      WWW_GROUP_ID: ${WWW_GROUP_ID:-1000}
-      DOLI_DB_HOST: ${DOLI_DB_HOST:-mariadb}
-      DOLI_DB_NAME: ${DOLI_DB_NAME:-dolidb}
-      DOLI_DB_USER: ${DOLI_DB_USER:-dolidbuser}
-      DOLI_DB_PASSWORD: ${DOLI_DB_PASSWORD:-dolidbpass}
-      DOLI_URL_ROOT: "${DOLI_URL_ROOT:-http://0.0.0.0}"
-      DOLI_ADMIN_LOGIN: "${DOLI_ADMIN_LOGIN:-admin}"
-      DOLI_ADMIN_PASSWORD: "${DOLI_ADMIN_PASSWORD:-admin}"
-      DOLI_CRON: ${DOLI_CRON:-0}
-      DOLI_INIT_DEMO: ${DOLI_INIT_DEMO:-0}
-      DOLI_COMPANY_NAME: ${DOLI_COMPANY_NAME:-MyBigCompany}
+      - db_data:/var/lib/mysql
     ports:
-      - "8080:80"
-    volumes:
-      - ./documents:/var/www/documents
-      - ./custom:/var/www/html/custom
-    networks:
-      - dolibarr_network
+      - "3306:3306"
 
-  devwatch:
-    image: alpine:latest
-    volumes:
-      - /home/dolibarr_custom:/var/www/html/custom
-    command: >
-      sh -c "apk add --no-cache inotify-tools &&
-             while inotifywait -r -e modify,create,delete /var/www/html/custom; do
-               echo '🔄 Fichiers modifiés, rechargement d'Apache...';
-               docker exec -it $(docker ps -qf 'name=web') apachectl -k restart;
-             done"
-    networks:
-      - dolibarr_network
+  dolibarr:
+    image: dolibarr/dolibarr:21
+    container_name: ${APP_NAME}_app
+    restart: always
     depends_on:
-      - web
+      - db
+    ports:
+      - "8081:80"
+    environment:
+      DOLI_DB_HOST: db
+      DOLI_DB_NAME: ${DOLI_DB_NAME}
+      DOLI_DB_USER: ${DOLI_DB_USER}
+      DOLI_DB_PASSWORD: ${DOLI_DB_PASSWORD}
+      DOLI_ADMIN_LOGIN: ${DOLI_ADMIN_LOGIN}
+      DOLI_ADMIN_PASSWORD: ${DOLI_ADMIN_PASSWORD}
+      WWW_USER_ID: ${WWW_USER_ID}
+      WWW_GROUP_ID: ${WWW_GROUP_ID}
+    volumes:
+      - /home/rocken/dolibarrs/${APP_NAME}/custom:/var/www/html/custom
 
-networks:
-  dolibarr_network:
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: ${APP_NAME}_pma
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "8082:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: ${DOLI_DB_USER}
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+  grafana:
+    image: grafana/grafana
+    container_name: ${APP_NAME}_grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  prometheus:
+    image: prom/prometheus
+    container_name: ${APP_NAME}_prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  node-exporter:
+    image: prom/node-exporter
+    container_name: node_exporter
+    restart: always
+    ports:
+      - "9100:9100"
+
+volumes:
+  db_data:
+  grafana_data:
